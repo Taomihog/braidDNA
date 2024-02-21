@@ -23,36 +23,36 @@
 #include "angle_adjust.h"
 #include "braid_math.h"
 
-#define M_PI       3.14159265358979323846
+#define M_PI       3.14159265358979323846f
 
 int main(int argc, char ** argv) {
 
     // unit: pN, nm, s, rad
     // *******************constant definitions and memory allocation**********************
     // DNA parameters:
-    constexpr float kT = 4.1;
-    constexpr float alpha = 2.4;
-    constexpr float polymer_diameter = 2.0;
+    constexpr float kT = 4.1f;
+    constexpr float alpha = 2.4f;
+    constexpr float polymer_diameter = 2.0f;
     constexpr size_t n_segments = 10000;
-    constexpr float total_length = 4300.0;
+    constexpr float total_length = 4300.0f;
     constexpr float segment_length = total_length / n_segments;
 
     // DNA anchoring positions and linking number of the braid
-    constexpr float separation_top = 500.0;
-    constexpr float separation_surface = 300.0;
-    constexpr float init_height = 0.3 * total_length;
-    constexpr float LK = 5.0;
-    constexpr float init_azimuthal_angle = 2 * M_PI * LK;
+    constexpr float separation_top = 500.0f;
+    constexpr float separation_surface = 300.0f;
+    constexpr float init_height = 0.3f * total_length;
+    constexpr float LK = 5.0f;
+    constexpr float init_azimuthal_angle = 2.0f * M_PI * LK;
 
     // trap stiffness along 3 directions and the constant force
-    constexpr float k_azimu = 0.1;
-    constexpr float k_polar = 0.1;
-    constexpr float k_r = 1.0;
-    constexpr float force = 0.5;
+    constexpr float k_azimu = 0.1f;
+    constexpr float k_polar = 0.1f;
+    constexpr float k_r = 1.0f;
+    constexpr float force = 0.5f;
 
     // simulation parameters;
     constexpr size_t max_steps = 10000;
-    constexpr float init_angle = 0.1;
+    constexpr float init_angle = 0.1f;
     angle_adjust angle(init_angle, 1000);
 
     // struct for polymer coordinates
@@ -81,23 +81,22 @@ int main(int argc, char ** argv) {
 
     // ****************************thermalization + simulation****************************
     // variables for move
-    float angle = init_angle;
-    int chain; // 0 = move the first chain, 1 = move the second chain
+    size_t chain; // 0 = move the first chain, 1 = move the second chain
     size_t ns, ne; // start and end node numbers for move
     size_t i_start, i_end;
     size_t size_to_copy;
 
     // variables for acceptable check
     bool is_succeeded = false;
-    bool e_total;
-    bool e_prev;
-    bool rotation_type;
+    float e_total = 0.0f;
+    float e_prev = 1e10f;
+    bool rotation_type = false;
     for (size_t step = 0; step < max_steps; ++step) {
 
         //pick a chain to do ratation
         chain = rnd_chain(gen);
         //pick a node
-        size_t ns = rnd_node(gen);
+        ns = rnd_node(gen);
         //pick a chain and 2 nodes for move
         ne = ns;
         while(ne == ns) {

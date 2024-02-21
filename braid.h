@@ -14,7 +14,6 @@ struct braid {
     ~braid() {
         delete[] polymer[0];
         delete[] polymer[1];
-        delete[] polymer;
     }
 
     size_t n_seg;
