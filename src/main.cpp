@@ -19,11 +19,9 @@
 #include <random>
 #include <cmath>
 
-#include "braid.h"
 #include "angle_adjust.h"
-#include "braid_math.h"
+#include "math_braid.h"
 
-#define M_PI       3.14159265358979323846f
 
 int main(int argc, char ** argv) {
 
@@ -40,7 +38,6 @@ int main(int argc, char ** argv) {
     // DNA anchoring positions and linking number of the braid
     constexpr float separation_top = 500.0f;
     constexpr float separation_surface = 300.0f;
-    constexpr float init_height = 0.3f * total_length;
     constexpr float LK = 5.0f;
     constexpr float init_azimuthal_angle = 2.0f * M_PI * LK;
 
@@ -61,7 +58,7 @@ int main(int argc, char ** argv) {
     constexpr size_t polymer_bytes = n_segments * 3 * sizeof(float);
 
     // initialize the corrdinates
-    braid_math::init_config(b_curr, separation_surface, separation_top, init_height, init_azimuthal_angle);
+    math_braid::init_config(b_curr, separation_surface, separation_top, init_azimuthal_angle);
     // cannot guarantee the 2 arrays are allocated in contiguous memory, have to copy them individually
     memcpy(b_temp.polymer[0], b_curr.polymer[0], polymer_bytes);
     memcpy(b_temp.polymer[1], b_curr.polymer[1], polymer_bytes);
@@ -72,7 +69,8 @@ int main(int argc, char ** argv) {
 
     // Random boolean variable
     std::bernoulli_distribution rnd_type_of_rot(0.1); // only 10% chance to do rot_out()
-    std::uniform_int_distribution<size_t> rnd_node(0, n_segments);
+    // std::uniform_int_distribution<size_t> rnd_node(0, n_segments); // there are n_seg + 1 nodes
+    std::uniform_int_distribution<size_t> rnd_seg(0, n_segments - 1); // there are n_seg segments
     std::uniform_int_distribution<size_t> rnd_chain(0, 2); // 50% chance of Chain1 and Chain2
     std::uniform_real_distribution<float> rnd_cos(-1,1);
     std::uniform_real_distribution<float> rnd_p(0,1);
@@ -82,7 +80,7 @@ int main(int argc, char ** argv) {
     // ****************************thermalization + simulation****************************
     // variables for move
     size_t chain; // 0 = move the first chain, 1 = move the second chain
-    size_t ns, ne; // start and end node numbers for move
+    size_t seg_start, seg_end; // start and end node numbers for move
     size_t i_start, i_end;
     size_t size_to_copy;
 
@@ -91,64 +89,53 @@ int main(int argc, char ** argv) {
     float e_total = 0.0f;
     float e_prev = 1e10f;
     bool rotation_type = false;
+
     for (size_t step = 0; step < max_steps; ++step) {
-
-        //pick a chain to do ratation
-        chain = rnd_chain(gen);
-        //pick a node
-        ns = rnd_node(gen);
-        //pick a chain and 2 nodes for move
-        ne = ns;
-        while(ne == ns) {
-            ne = rnd_node(gen);
-        }
-
-        // move
         //pick a type of move
         rotation_type = rnd_type_of_rot(gen);
+        chain = rnd_chain(gen);
+        seg_start = rnd_seg(gen);
+
         if (rotation_type) {
-            // rotate the outside
-            i_start =  (chain * n_segments + ne) * 3;
-            i_end = (chain * n_segments + ne) * 3;
-            size_to_copy = 0;
-            memcpy(b_temp.polymer[chain] + i_start, b_curr.polymer[chain] + i_start, size_to_copy);
-            braid_math::rot_out(b_temp.polymer[chain], ns, std::acos(rnd_cos(gen)));
-
+            // rotate1
+            braid::copy(b_temp, b_curr, chain, seg_start, seg_start);
+            math_braid::rot_out(b_temp.polymer[chain], seg_start, std::acos(rnd_cos(gen)));
         } else {
-            // rotate the inide
-            size_to_copy = 0;
-            memcpy(b_temp.polymer[chain] + i_start, b_curr.polymer[chain] + i_start, size_to_copy);
-            braid_math::rot_in(b_temp.polymer[chain], ns, ne, angle());
-
+            //pick 2 segment 
+            
+            seg_end = seg_start;
+            while(seg_start == seg_end) {
+                seg_end = rnd_seg(gen);
+            }
+            seg_start = std::min(seg_end, seg_start);
+            seg_end = std::max(seg_end, seg_start);
+            // rotate2
+            braid::copy(b_temp, b_curr, chain, seg_start, seg_end);
+            math_braid::rot_in(b_temp.polymer[chain], seg_start, seg_end, angle());
         }
 
 
 
         // calculate if collide, p1
-        is_succeeded = braid_math::collided(b_temp, polymer_diameter) && 
+        is_succeeded = math_braid::collided(b_temp, polymer_diameter) && 
 
         // calculate alexandra polynomial, p2
-        braid_math::alexander_polyn(b_temp) == 0;
+        math_braid::alexander_polyn(b_temp) == 0;
 
         // calculate the energy, p3
-        // energy equals to E_polymer + E_trap -Fz
+        // energy equals to E_polymer + E_trap - Fz
         if (is_succeeded) {
-            e_total = alpha * braid_math::total_bend(b_temp) + 
-                    0.5 * k_azimu * std::pow(braid_math::azimuthal_angle(b_temp) - init_azimuthal_angle, 2) + 
-                    0.5 * k_polar * std::pow(braid_math::polar_angle(b_temp), 2) +
-                    0.5 * k_r * std::pow(braid_math::end_distance(b_temp) - separation_top, 2) -
-                    force * braid_math::extension(b_temp);
+            e_total = alpha * math_braid::total_bend(b_temp) + 
+                    0.5 * k_azimu * (float)std::pow(math_braid::azimuthal_angle(b_temp) - init_azimuthal_angle, 2) + 
+                    0.5 * k_polar * (float)std::pow(math_braid::polar_angle(b_temp), 2) +
+                    0.5 * k_r * (float)std::pow(math_braid::end_distance(b_temp) - separation_top, 2) -
+                    force * math_braid::extension(b_temp);
             
             if (std::exp(-(e_total - e_prev)/kT) > rnd_p(gen)) {
                 //memcpy
                 e_total = e_prev;
-                if(rotation_type) {
-                    size_to_copy = 0;
-                    memcpy(b_curr.polymer[chain] + i_start, b_temp.polymer[chain] + i_start, size_to_copy);
-                } else {
-                    size_to_copy = 0;
-                    memcpy(b_curr.polymer[chain] + i_start, b_temp.polymer[chain] + i_start, size_to_copy);
-                }
+                rotation_type ? braid::copy(b_curr, b_temp, chain, seg_start, seg_start): 
+                                braid::copy(b_curr, b_temp, chain, seg_start, seg_end);
             } else {
                 is_succeeded = false;
             }
